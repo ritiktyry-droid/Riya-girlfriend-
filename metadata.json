@@ -1,0 +1,6 @@
+{
+  "name": "Riya AI - Personal Companion & Task Automation",
+  "description": "Voice-enabled AI girlfriend & smart task assistant with search grounding, device commands, offline sync, and interactive voice modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

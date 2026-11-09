@@ -23,7 +23,7 @@ interface ChatTabProps {
   onVoiceClick: () => void;
   isLoading: boolean;
   preferences: UserPreferences;
-  onChangeModel: (model: 'gemini-3.8-flash' | 'gemini-3.1-flash-lite' | 'gemini-4-argon') => void;
+  onChangeModel: (model: 'gemini-3.8-flash' | 'gemini-3.1-flash-lite' | 'gemini-3.8-flash-thinking') => void;
   onToggleSearchGrounding: () => void;
 }
 
@@ -112,14 +112,14 @@ export const ChatTab: React.FC<ChatTabProps> = ({
           </button>
 
           <button
-            onClick={() => onChangeModel('gemini-4-argon')}
+            onClick={() => onChangeModel('gemini-3.8-flash-thinking')}
             className={`px-2.5 py-1 rounded-full font-medium transition whitespace-nowrap flex items-center space-x-1 ${
-              preferences.activeModel === 'gemini-4-argon'
+              preferences.activeModel === 'gemini-3.8-flash-thinking'
                 ? 'bg-indigo-600 text-white shadow-[0_0_10px_#6366f1]'
                 : 'bg-purple-950/50 text-purple-300 hover:text-white'
             }`}
           >
-            <span>4 Argon (Deep)</span>
+            <span>3.8 Flash (Thinking)</span>
           </button>
         </div>
 

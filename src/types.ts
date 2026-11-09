@@ -46,7 +46,7 @@ export interface UserPreferences {
   voiceVoiceName: 'Kore' | 'Zephyr' | 'Aoede' | 'Fenrir' | 'Puck';
   autoVoiceReply: boolean;
   searchGrounding: boolean;
-  activeModel: 'gemini-3.8-flash' | 'gemini-3.1-flash-lite' | 'gemini-4-argon';
+  activeModel: 'gemini-3.8-flash' | 'gemini-3.1-flash-lite' | 'gemini-3.8-flash-thinking';
   soundEffects: boolean;
   hapticFeedback: boolean;
   themeColor: string;
@@ -58,3 +58,24 @@ export interface SyncState {
   lastSyncedAt: string | null;
   pendingChangesCount: number;
 }
+
+export type EmotionType =
+  | 'Happy'
+  | 'Romantic'
+  | 'Excited'
+  | 'Peaceful'
+  | 'Tired'
+  | 'Stressed'
+  | 'Sad';
+
+export interface MoodEntry {
+  id: string;
+  date: string; // e.g. "2026-11-08"
+  dayLabel: string; // e.g. "Sun"
+  emotion: EmotionType;
+  emoji: string;
+  score: number; // 1-10 scale for chart visualization
+  note?: string;
+  timestamp: string;
+}
+

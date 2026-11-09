@@ -22,6 +22,7 @@ import {
   saveReminders,
   getStoredPreferences,
   savePreferences,
+  getStoredMoods,
   getLastSyncTime,
   getPendingSyncCount,
   clearPendingSync,
@@ -86,6 +87,7 @@ export default function App() {
       tasks: getStoredTasks(),
       reminders: getStoredReminders(),
       preferences: getStoredPreferences(),
+      moods: getStoredMoods(),
     };
 
     const success = await pushSync(payload);
@@ -172,7 +174,7 @@ export default function App() {
       let mode: 'general' | 'fast' | 'complex' = 'general';
       if (preferences.activeModel === 'gemini-3.1-flash-lite') {
         mode = 'fast';
-      } else if (preferences.activeModel === 'gemini-4-argon') {
+      } else if (preferences.activeModel === 'gemini-3.8-flash-thinking') {
         mode = 'complex';
       }
 

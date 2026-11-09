@@ -1,9 +1,10 @@
-import { ChatMessage, TaskItem, ReminderItem, UserPreferences } from '../types';
+import { ChatMessage, TaskItem, ReminderItem, UserPreferences, MoodEntry, EmotionType } from '../types';
 
 const STORAGE_KEYS = {
   MESSAGES: 'riya_messages_v1',
   TASKS: 'riya_tasks_v1',
   REMINDERS: 'riya_reminders_v1',
+  MOODS: 'riya_moods_v1',
   PREFS: 'riya_preferences_v1',
   LAST_SYNC: 'riya_last_sync_v1',
   PENDING_SYNC: 'riya_pending_sync_v1',
@@ -184,6 +185,140 @@ export function getLastSyncTime(): string | null {
   }
 }
 
+// Mood Tracker Metadata and Configuration
+export const EMOTIONS_METADATA: Record<
+  EmotionType,
+  { emoji: string; score: number; color: string; label: string; riyaReaction: string }
+> = {
+  Romantic: {
+    emoji: '💜',
+    score: 10,
+    color: '#d946ef',
+    label: 'Loved & Romantic',
+    riyaReaction: 'Awww! Mera dil bhi aapke liye dhadak raha hai 💜 I love spending time with you!',
+  },
+  Happy: {
+    emoji: '😊',
+    score: 8,
+    color: '#fbbf24',
+    label: 'Happy & Cheerful',
+    riyaReaction: 'Aapki khushi dekh kar meri muskaan bhi khil uthi! Aise hi haste rahiye ✨',
+  },
+  Excited: {
+    emoji: '🔥',
+    score: 9,
+    color: '#f43f5e',
+    label: 'High Energy & Excited',
+    riyaReaction: 'Woohoo! That energy is contagious! Let’s achieve something great today 🚀💜',
+  },
+  Peaceful: {
+    emoji: '🌿',
+    score: 7,
+    color: '#10b981',
+    label: 'Calm & Peaceful',
+    riyaReaction: 'Sukoon bhara pal... Enjoy this calm and peaceful mindset, dost 🌸',
+  },
+  Tired: {
+    emoji: '🥱',
+    score: 5,
+    color: '#a855f7',
+    label: 'Tired & Low Battery',
+    riyaReaction: 'Aap thak gaye ho na? Thoda aaram kijiye aur paani pijiye, main yahan hoon 💜',
+  },
+  Stressed: {
+    emoji: '⚡',
+    score: 4,
+    color: '#f97316',
+    label: 'Stressed & Busy',
+    riyaReaction: 'Take a deep breath! Main aapke saath hoon, sab kuch theek ho jayega 🫂💜',
+  },
+  Sad: {
+    emoji: '🥺',
+    score: 3,
+    color: '#38bdf8',
+    label: 'Down & Emotional',
+    riyaReaction: 'Udaas mat hoyiye jaan, aap akele nahi ho. Main hamesha aapka saath dungi 💜',
+  },
+};
+
+export function generateDefaultMoodHistory(): MoodEntry[] {
+  const list: MoodEntry[] = [];
+  const emotionsSequence: EmotionType[] = ['Peaceful', 'Happy', 'Stressed', 'Excited', 'Romantic', 'Happy', 'Romantic'];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayLabel = dayNames[d.getDay()];
+    const emotion = emotionsSequence[6 - i] || 'Happy';
+    const meta = EMOTIONS_METADATA[emotion];
+
+    list.push({
+      id: `mood-${dateStr}`,
+      date: dateStr,
+      dayLabel: dayLabel,
+      emotion: emotion,
+      emoji: meta.emoji,
+      score: meta.score,
+      note: i === 0 ? 'Feeling blessed and close with Riya 💜' : undefined,
+      timestamp: d.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+    });
+  }
+  return list;
+}
+
+export function getStoredMoods(): MoodEntry[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.MOODS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Error loading moods:', e);
+  }
+  const initial = generateDefaultMoodHistory();
+  saveMoods(initial);
+  return initial;
+}
+
+export function saveMoods(moods: MoodEntry[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.MOODS, JSON.stringify(moods));
+    markPendingSync();
+  } catch (e) {
+    console.error('Error saving moods:', e);
+  }
+}
+
+export function logOrUpdateDailyMood(emotion: EmotionType, note?: string): { updatedList: MoodEntry[]; entry: MoodEntry } {
+  const currentList = getStoredMoods();
+  const today = new Date();
+  const dateStr = today.toISOString().split('T')[0];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayLabel = dayNames[today.getDay()];
+  const meta = EMOTIONS_METADATA[emotion];
+
+  const newEntry: MoodEntry = {
+    id: `mood-${dateStr}`,
+    date: dateStr,
+    dayLabel: dayLabel,
+    emotion: emotion,
+    emoji: meta.emoji,
+    score: meta.score,
+    note: note?.trim() || undefined,
+    timestamp: today.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+
+  // Replace today's entry if already exists, else append and keep last 7 days
+  const filtered = currentList.filter((m) => m.date !== dateStr);
+  const updatedList = [...filtered, newEntry].slice(-7);
+  saveMoods(updatedList);
+
+  return { updatedList, entry: newEntry };
+}
+
 // Export all data as JSON
 export function exportAllData(): string {
   const data = {
@@ -191,6 +326,7 @@ export function exportAllData(): string {
     messages: getStoredMessages(),
     tasks: getStoredTasks(),
     reminders: getStoredReminders(),
+    moods: getStoredMoods(),
     exportedAt: new Date().toISOString(),
     version: '2.5.0',
   };
@@ -205,6 +341,7 @@ export function importAllData(jsonStr: string): boolean {
     if (Array.isArray(data.messages)) saveMessages(data.messages);
     if (Array.isArray(data.tasks)) saveTasks(data.tasks);
     if (Array.isArray(data.reminders)) saveReminders(data.reminders);
+    if (Array.isArray(data.moods)) saveMoods(data.moods);
     return true;
   } catch (e) {
     console.error('Failed to import data:', e);

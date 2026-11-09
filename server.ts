@@ -1,9 +1,10 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import JSZip from 'jszip';
 
 dotenv.config();
@@ -16,16 +17,17 @@ const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '25mb' }));
 
-// Initialize GoogleGenAI client server-side
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({
-  apiKey: apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+// Helper to get GoogleGenAI client with current runtime environment key
+function getAiClient(): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY || 'placeholder-key',
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
     },
-  },
-});
+  });
+}
 
 // Health check & device info API
 app.get('/api/health', (req: Request, res: Response) => {
@@ -33,7 +35,7 @@ app.get('/api/health', (req: Request, res: Response) => {
     status: 'ok',
     assistant: 'Riya AI',
     version: '2.5.0-ultra',
-    hasApiKey: Boolean(apiKey),
+    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
     timestamp: new Date().toISOString(),
   });
 });
@@ -41,6 +43,8 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Chat endpoint supporting search grounding, multi-turn history, and role modes
 app.post('/api/chat', async (req: Request, res: Response) => {
   try {
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    const ai = getAiClient();
     const {
       message,
       history = [],
@@ -63,15 +67,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       });
     }
 
-    // Select model according to role and user instructions:
-    // gemini-3.8-flash for general & search grounding
+    // Select model according to role and free-tier compatibility:
+    // gemini-3.8-flash for general & deep reasoning (with ThinkingLevel.HIGH)
     // gemini-3.1-flash-lite for fast tasks
-    // gemini-4-argon for complex tasks
     let modelName = 'gemini-3.8-flash';
     if (mode === 'fast') {
       modelName = 'gemini-3.1-flash-lite';
-    } else if (mode === 'complex') {
-      modelName = 'gemini-4-argon';
     } else {
       modelName = 'gemini-3.8-flash';
     }
@@ -123,8 +124,13 @@ Available simulated tools and device abilities:
       systemInstruction: systemInstruction,
     };
 
+    // For complex tasks, enable High Thinking reasoning on gemini-3.8-flash
+    if (mode === 'complex') {
+      config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+    }
+
     // Google Search Grounding for gemini-3.8-flash if requested
-    if (searchGrounding && (modelName === 'gemini-3.8-flash' || modelName === 'gemini-4-argon')) {
+    if (searchGrounding && modelName === 'gemini-3.8-flash') {
       config.tools = [{ googleSearch: {} }];
     }
 
@@ -140,14 +146,15 @@ Available simulated tools and device abilities:
     return res.json({
       reply: replyText,
       groundingChunks: groundingChunks,
-      modelUsed: modelName,
+      modelUsed: mode === 'complex' ? 'gemini-3.8-flash (thinking)' : modelName,
     });
   } catch (error: any) {
-    console.error('Chat API initial attempt error:', error?.message || error);
+    console.warn('Chat API initial attempt note: fallback needed');
 
     // Secondary attempt with gemini-3.1-flash-lite without extra tools
     try {
-      const fallbackResponse = await ai.models.generateContent({
+      const fallbackAi = getAiClient();
+      const fallbackResponse = await fallbackAi.models.generateContent({
         model: 'gemini-3.1-flash-lite',
         contents: [{ role: 'user', parts: [{ text: req.body.message }] }],
         config: {
@@ -201,10 +208,12 @@ app.post('/api/tts', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Text is required for TTS' });
     }
 
+    const apiKey = process.env.GEMINI_API_KEY || '';
     if (!apiKey) {
       return res.status(503).json({ error: 'Gemini API key not configured' });
     }
 
+    const ai = getAiClient();
     // TTS Call using unary generateContent to receive audio/wav
     const ttsResponse = await ai.models.generateContent({
       model: model,
@@ -242,7 +251,7 @@ app.post('/api/tts', async (req: Request, res: Response) => {
       mimeType: 'audio/wav',
     });
   } catch (err: any) {
-    console.error('TTS error:', err);
+    console.warn('TTS notice:', err?.message || err);
     return res.status(500).json({ error: err.message || 'Failed to synthesize speech' });
   }
 });
@@ -256,10 +265,12 @@ app.post('/api/generate-image', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
+    const apiKey = process.env.GEMINI_API_KEY || '';
     if (!apiKey) {
       return res.status(503).json({ error: 'Gemini API key not configured' });
     }
 
+    const ai = getAiClient();
     const parts: any[] = [];
     if (baseImage && typeof baseImage === 'string') {
       const cleanBase64 = baseImage.replace(/^data:image\/\w+;base64,/, '');

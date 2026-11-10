@@ -189,3 +189,31 @@ export async function getRealBatteryInfo(): Promise<{
   }
   return null;
 }
+
+// Request AI mood analysis from server
+export async function requestMoodAnalysis(
+  moods: any[],
+  userName = 'Dost'
+): Promise<{
+  trendTitle: string;
+  emotionalSummary: string;
+  selfCareSuggestions: string[];
+  riyaMessage: string;
+} | null> {
+  try {
+    const res = await fetch('/api/analyze-mood', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ moods, userName }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.success && data.analysis?.emotionalSummary) {
+      return data.analysis;
+    }
+  } catch (err) {
+    console.warn('API mood analysis request failed:', err);
+  }
+  return null;
+}

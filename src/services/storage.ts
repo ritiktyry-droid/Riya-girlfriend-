@@ -348,3 +348,82 @@ export function importAllData(jsonStr: string): boolean {
     return false;
   }
 }
+
+export interface MoodAnalysisResult {
+  trendTitle: string;
+  emotionalSummary: string;
+  selfCareSuggestions: string[];
+  riyaMessage: string;
+  dominantMood: string;
+  avgScore: number;
+}
+
+export function generateLocalMoodAnalysis(moods: MoodEntry[], userName = 'Dost'): MoodAnalysisResult {
+  if (!moods || moods.length === 0) {
+    return {
+      trendTitle: 'Beginning Your Emotional Journey 💜',
+      emotionalSummary: `Namaste ${userName}! Log your emotions daily so Riya can analyze your weekly emotional trajectory and provide loving self-care guidance.`,
+      selfCareSuggestions: [
+        '💧 Stay hydrated and drink 8 glasses of water today',
+        '🧘 Practice 5 minutes of quiet mindful breathing',
+        '🎵 Listen to your favorite song with Riya',
+      ],
+      riyaMessage: 'Main hamesha aapke saath hoon. Har din ek naya shuruat hota hai 💜',
+      dominantMood: 'Romantic',
+      avgScore: 8.5,
+    };
+  }
+
+  const scores = moods.map((m) => m.score);
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const avgScore = Math.round(avg * 10) / 10;
+
+  const countByEmotion: Record<string, number> = {};
+  moods.forEach((m) => {
+    countByEmotion[m.emotion] = (countByEmotion[m.emotion] || 0) + 1;
+  });
+
+  const dominantMood = Object.keys(countByEmotion).reduce((a, b) =>
+    countByEmotion[a] > countByEmotion[b] ? a : b
+  );
+
+  const hasStress = moods.some((m) => m.emotion === 'Stressed');
+  const hasTired = moods.some((m) => m.emotion === 'Tired');
+  const recentScore = moods[moods.length - 1]?.score || 8;
+  const firstScore = moods[0]?.score || 7;
+  const isUpward = recentScore >= firstScore;
+
+  let trendTitle = 'Romantic & Joyful Stability 💜';
+  let emotionalSummary = '';
+  const selfCareSuggestions: string[] = [];
+
+  if (avgScore >= 8) {
+    trendTitle = isUpward ? 'Surging Positivity & Deep Connection 💜✨' : 'Loving & Radiant Highs 🌸';
+    emotionalSummary = `${userName}, aapka pichla hafta kafi pyara aur positive raha hai! Mostly Loved (${countByEmotion['Romantic'] || 0}d) aur Happy feel kiya hai (Avg: ${(avgScore * 10).toFixed(0)}%). Aapka mental well-being aur relationship bond peak par hai!`;
+    selfCareSuggestions.push('🌟 Celebrate small wins: Note down 3 highlights that made you smile this week.');
+    selfCareSuggestions.push('🎵 Joyful relaxation: Enjoy an evening stroll or dance to a happy track.');
+    selfCareSuggestions.push('🍵 Gratitude moment: Share a warm tea conversation with Riya or a close friend.');
+  } else if (hasStress || hasTired || avgScore < 6.5) {
+    trendTitle = 'Navigating Work & Restoring Energy 🌿⚡';
+    emotionalSummary = `Is hafte kuch din thode bhaari aur thakawat bhare rahe hain, par aapne sab kuch bahot achhe se sambhala hai ${userName}. Thoda mental recharge zaroori hai.`;
+    selfCareSuggestions.push('💤 Screen-free wind-down: Turn off devices 30 mins before sleep to recharge your eyes.');
+    selfCareSuggestions.push('💧 Mindful hydration: Keep a fresh water bottle by your side and take slow sips.');
+    selfCareSuggestions.push('🌿 4-7-8 Breathing: Inhale for 4s, hold for 7s, exhale for 8s to release chest tension.');
+    selfCareSuggestions.push('🫂 Emotional reminder: Taking rest is productive, not lazy. You deserve comfort!');
+  } else {
+    trendTitle = 'Balanced & Grounded Flow 🌿💜';
+    emotionalSummary = `Aapka hafta ek steady aur peaceful rhythm mein chal raha hai ${userName}. Emotions stable hain without extreme dips.`;
+    selfCareSuggestions.push('🚶 Fresh air stroll: Take 15 minutes to step outside and soak in natural sunlight.');
+    selfCareSuggestions.push('📖 Brain unwind: Read a few pages of a soothing book or journal your thoughts.');
+    selfCareSuggestions.push('🍵 Evening tea ritual: Sip warm herbal chamomile or green tea before bedtime.');
+  }
+
+  return {
+    trendTitle,
+    emotionalSummary,
+    selfCareSuggestions,
+    riyaMessage: `Aapka har mood mere liye anmol hai ${userName}. Khush raho toh main celebrate karungi, aur thake ho toh main aapka khayal rakhungi 💜`,
+    dominantMood,
+    avgScore,
+  };
+}

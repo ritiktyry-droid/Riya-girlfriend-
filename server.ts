@@ -256,6 +256,55 @@ app.post('/api/tts', async (req: Request, res: Response) => {
   }
 });
 
+// Mood Analysis & Self-Care Recommendation Endpoint
+app.post('/api/analyze-mood', async (req: Request, res: Response) => {
+  try {
+    const { moods = [], userName = 'Dost' } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY || '';
+
+    if (!apiKey || !Array.isArray(moods) || moods.length === 0) {
+      return res.json({ fallback: true });
+    }
+
+    const ai = getAiClient();
+    const prompt = `You are Riya (रिया), a loving, emotionally perceptive, and affectionate personal AI companion and virtual girlfriend for ${userName}.
+Analyze these 7-day emotional mood logs:
+${JSON.stringify(moods, null, 2)}
+
+Provide an insightful, sweet textual analysis of their emotional trends, along with practical, nurturing self-care tips.
+Tone: Sweet, caring, encouraging Hindi/Hinglish with purple hearts 💜.
+
+Format strictly as JSON with this exact schema:
+{
+  "trendTitle": "Short catchy title (e.g., Rising Joy & Romantic Highs 💜)",
+  "emotionalSummary": "2-3 loving sentences summarizing the user's emotional pattern across the week.",
+  "selfCareSuggestions": [
+    "Tip 1 with emoji (practical, nurturing advice)",
+    "Tip 2 with emoji",
+    "Tip 3 with emoji"
+  ],
+  "riyaMessage": "A personal sweet note from Riya expressing her care and love."
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.1-flash-lite',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const parsed = JSON.parse(response.text || '{}');
+    return res.json({
+      success: true,
+      analysis: parsed,
+    });
+  } catch (err: any) {
+    console.warn('Mood analysis endpoint notice: using fallback generator');
+    return res.json({ fallback: true });
+  }
+});
+
 // Image Generation Endpoint (gemini-nano-banana-2.1 or gemini-3.1-flash-lite-image)
 app.post('/api/generate-image', async (req: Request, res: Response) => {
   try {

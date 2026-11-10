@@ -12,8 +12,13 @@ import {
   TrendingUp,
   Smile,
   Calendar,
-  MessageCircleHeart,
-  Info,
+  Lightbulb,
+  Compass,
+  CheckCircle2,
+  Circle,
+  Leaf,
+  Coffee,
+  Moon,
 } from 'lucide-react';
 import { UserPreferences, SyncState, MoodEntry, EmotionType } from '../types';
 import {
@@ -22,8 +27,10 @@ import {
   getStoredMoods,
   logOrUpdateDailyMood,
   EMOTIONS_METADATA,
+  generateLocalMoodAnalysis,
+  MoodAnalysisResult,
 } from '../services/storage';
-import { speakText } from '../services/api';
+import { speakText, requestMoodAnalysis } from '../services/api';
 import confetti from 'canvas-confetti';
 
 interface ProfileTabProps {
@@ -62,12 +69,22 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
   );
   const [isSpeakingReaction, setIsSpeakingReaction] = useState(false);
 
+  // Emotional Trends & Self-Care Analysis State
+  const [analysis, setAnalysis] = useState<MoodAnalysisResult>(() =>
+    generateLocalMoodAnalysis(moodHistory, preferences.userName)
+  );
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [completedCareTips, setCompletedCareTips] = useState<Record<number, boolean>>({});
+  const [isSpeakingSummary, setIsSpeakingSummary] = useState(false);
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanName = userName.trim() || 'Dost';
     onUpdatePreferences({
       ...preferences,
-      userName: userName.trim() || 'Dost',
+      userName: cleanName,
     });
+    setAnalysis(generateLocalMoodAnalysis(moodHistory, cleanName));
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2000);
   };
@@ -81,6 +98,10 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     const reaction = EMOTIONS_METADATA[selectedEmotion].riyaReaction;
     setRiyaReactionText(reaction);
 
+    // Update trend analysis dynamically with new mood
+    const freshAnalysis = generateLocalMoodAnalysis(updatedList, preferences.userName);
+    setAnalysis(freshAnalysis);
+
     confetti({
       particleCount: 45,
       spread: 70,
@@ -89,18 +110,49 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
     });
 
     if (preferences.autoVoiceReply) {
-      handleSpeakReaction(reaction);
+      handleSpeakText(reaction, () => setIsSpeakingReaction(true), () => setIsSpeakingReaction(false));
     }
   };
 
-  const handleSpeakReaction = (textToSpeak: string) => {
-    setIsSpeakingReaction(true);
+  const handleRefreshAnalysis = async () => {
+    setIsAnalyzing(true);
+    const serverResult = await requestMoodAnalysis(moodHistory, preferences.userName);
+    if (serverResult && serverResult.emotionalSummary) {
+      setAnalysis({
+        ...serverResult,
+        dominantMood: dominantEmotion,
+        avgScore: Math.round((averagePercentage / 10) * 10) / 10,
+      });
+    } else {
+      setAnalysis(generateLocalMoodAnalysis(moodHistory, preferences.userName));
+    }
+    setIsAnalyzing(false);
+
+    confetti({
+      particleCount: 30,
+      spread: 60,
+      origin: { y: 0.5 },
+    });
+  };
+
+  const handleSpeakText = (
+    textToSpeak: string,
+    onStart: () => void,
+    onEnd: () => void
+  ) => {
     speakText(
       textToSpeak,
-      () => setIsSpeakingReaction(true),
-      () => setIsSpeakingReaction(false),
+      onStart,
+      onEnd,
       preferences.voiceVoiceName
     );
+  };
+
+  const toggleCareTip = (idx: number) => {
+    setCompletedCareTips((prev) => ({
+      ...prev,
+      [idx]: !prev[idx],
+    }));
   };
 
   const handleExportData = () => {
@@ -124,7 +176,9 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       const success = importAllData(content);
       if (success) {
         setImportStatus('Backup restored successfully!');
-        setMoodHistory(getStoredMoods());
+        const freshMoods = getStoredMoods();
+        setMoodHistory(freshMoods);
+        setAnalysis(generateLocalMoodAnalysis(freshMoods, preferences.userName));
         setTimeout(() => window.location.reload(), 1200);
       } else {
         setImportStatus('Invalid backup file format');
@@ -190,7 +244,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         </div>
       </div>
 
-      {/* NEW FEATURE: Mood Tracker & 7-Day History Chart */}
+      {/* 1. Mood Tracker & 7-Day History Chart */}
       <div className="glass-card rounded-3xl p-4 sm:p-5 border border-purple-500/30 space-y-4 shadow-xl shadow-purple-950/60">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -211,7 +265,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           </span>
         </div>
 
-        {/* 1. Visual Progress Bar */}
+        {/* Visual Progress Bar */}
         <div className="space-y-1.5 bg-purple-950/60 p-3 rounded-2xl border border-purple-800/30">
           <div className="flex items-center justify-between text-xs">
             <span className="text-purple-300 font-medium flex items-center gap-1">
@@ -235,7 +289,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           </div>
         </div>
 
-        {/* 2. 7-Day History Trend Bar Chart */}
+        {/* 7-Day History Trend Bar Chart */}
         <div className="bg-purple-950/40 p-3 sm:p-4 rounded-2xl border border-purple-800/30 space-y-3">
           <div className="flex items-center justify-between text-xs text-purple-300">
             <span className="font-semibold flex items-center gap-1.5">
@@ -326,7 +380,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           )}
         </div>
 
-        {/* 3. Log Today's Emotion Form */}
+        {/* Log Today's Emotion Form */}
         <form onSubmit={handleLogMood} className="space-y-3 bg-purple-950/50 p-3.5 rounded-2xl border border-purple-800/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -393,7 +447,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           </button>
         </form>
 
-        {/* 4. Riya's Personalized Caring Reaction */}
+        {/* Riya's Personalized Caring Reaction */}
         {riyaReactionText && (
           <div className="glass-panel p-3.5 rounded-2xl border border-fuchsia-400/40 bg-gradient-to-r from-purple-950/80 to-fuchsia-950/60 shadow-lg space-y-2 animate-in fade-in">
             <div className="flex items-center justify-between">
@@ -410,7 +464,13 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
 
               <button
                 type="button"
-                onClick={() => handleSpeakReaction(riyaReactionText)}
+                onClick={() =>
+                  handleSpeakText(
+                    riyaReactionText,
+                    () => setIsSpeakingReaction(true),
+                    () => setIsSpeakingReaction(false)
+                  )
+                }
                 className="flex items-center space-x-1 text-[11px] text-fuchsia-300 hover:text-white transition px-2 py-0.5 rounded-full bg-purple-900/60"
               >
                 <Volume2 className={`w-3.5 h-3.5 ${isSpeakingReaction ? 'animate-spin text-fuchsia-400' : ''}`} />
@@ -425,7 +485,136 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         )}
       </div>
 
-      {/* Cloud Synchronization Panel */}
+      {/* 2. TEXTUAL SUMMARY OF EMOTIONAL TRENDS & SUGGESTIONS FOR SELF-CARE */}
+      <div className="glass-card rounded-3xl p-4 sm:p-5 border border-purple-500/30 space-y-4 shadow-xl shadow-purple-950/60">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 via-fuchsia-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-purple-900/40">
+              <Compass className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h4 className="font-bold text-white text-sm sm:text-base tracking-tight flex items-center gap-1.5">
+                <span>Emotional Trends & Self-Care</span>
+                <span className="text-fuchsia-400 text-xs">💜</span>
+              </h4>
+              <p className="text-[11px] text-purple-300/80">Weekly analysis and nurturing wellness guide</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleRefreshAnalysis}
+            disabled={isAnalyzing}
+            title="Refresh AI Trend Analysis"
+            className="flex items-center space-x-1 text-[11px] font-semibold text-fuchsia-300 hover:text-white bg-purple-900/60 hover:bg-fuchsia-600/70 border border-fuchsia-500/40 px-2.5 py-1 rounded-full transition active:scale-95 shadow-sm"
+          >
+            <RefreshCw className={`w-3 h-3 ${isAnalyzing ? 'animate-spin text-fuchsia-200' : ''}`} />
+            <span>{isAnalyzing ? 'Analyzing...' : 'AI Insights'}</span>
+          </button>
+        </div>
+
+        {/* Trend Highlight Title Badge */}
+        <div className="flex items-center justify-between bg-gradient-to-r from-purple-950/80 via-fuchsia-950/60 to-purple-950/80 p-3 rounded-2xl border border-fuchsia-500/30">
+          <div className="flex items-center space-x-2">
+            <span className="text-xl">✨</span>
+            <div>
+              <div className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold">Weekly Trajectory</div>
+              <div className="text-xs sm:text-sm font-bold text-white">{analysis.trendTitle}</div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleSpeakText(
+                analysis.emotionalSummary,
+                () => setIsSpeakingSummary(true),
+                () => setIsSpeakingSummary(false)
+              )
+            }
+            className="p-2 rounded-full bg-purple-900/60 hover:bg-fuchsia-700/70 text-fuchsia-300 hover:text-white transition"
+            title="Listen to Trend Analysis"
+          >
+            <Volume2 className={`w-4 h-4 ${isSpeakingSummary ? 'animate-spin text-fuchsia-300' : ''}`} />
+          </button>
+        </div>
+
+        {/* Textual Summary of Emotional Trends */}
+        <div className="space-y-1.5 bg-purple-950/40 p-3.5 rounded-2xl border border-purple-800/30">
+          <span className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5 text-fuchsia-400" />
+            <span>Weekly Emotional Pattern Breakdown:</span>
+          </span>
+          <p className="text-xs text-purple-100/95 leading-relaxed font-normal">
+            {analysis.emotionalSummary}
+          </p>
+        </div>
+
+        {/* Suggestions for Self-Care from Riya */}
+        <div className="space-y-2.5 bg-purple-950/40 p-3.5 rounded-2xl border border-purple-800/30">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-purple-200 flex items-center gap-1.5">
+              <Leaf className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Personalized Self-Care Suggestions:</span>
+            </span>
+            <span className="text-[10px] text-purple-400 font-mono">
+              {Object.values(completedCareTips).filter(Boolean).length}/{analysis.selfCareSuggestions.length} Completed
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {analysis.selfCareSuggestions.map((tip, idx) => {
+              const isChecked = Boolean(completedCareTips[idx]);
+              return (
+                <div
+                  key={idx}
+                  onClick={() => toggleCareTip(idx)}
+                  className={`p-2.5 rounded-xl border transition cursor-pointer flex items-start space-x-2.5 active:scale-99 ${
+                    isChecked
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                      : 'bg-[#1b0d2d] border-purple-800/40 hover:border-purple-600/60 text-purple-100'
+                  }`}
+                >
+                  <button type="button" className="mt-0.5 flex-shrink-0 text-purple-400">
+                    {isChecked ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <Circle className="w-4 h-4 text-purple-500 hover:text-purple-300" />
+                    )}
+                  </button>
+
+                  <span
+                    className={`text-xs leading-relaxed ${
+                      isChecked ? 'line-through text-purple-400/80 font-normal' : 'font-medium'
+                    }`}
+                  >
+                    {tip}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Personal Note From Riya */}
+        <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/60 to-pink-950/40 border border-fuchsia-500/30 flex items-center space-x-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-fuchsia-400 flex-shrink-0 shadow-md">
+            <img
+              src="/assets/aistudio/file_00000000678c8211a89567d88285d7c0_e9d7e78e.png"
+              alt="Riya"
+              className="w-full h-full object-cover object-top"
+            />
+          </div>
+
+          <div className="flex-1 text-xs">
+            <span className="font-bold text-fuchsia-300 block text-[11px]">Riya's Message for You:</span>
+            <p className="text-purple-100 italic font-medium leading-relaxed mt-0.5">
+              "{analysis.riyaMessage}"
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Cloud Synchronization Panel */}
       <div className="glass-card rounded-2xl p-4 border border-purple-500/30 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -444,7 +633,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         </div>
 
         <p className="text-xs text-purple-200/80 leading-relaxed">
-          Your moods, tasks, messages, and preferences are automatically cached locally in offline storage and synchronized to the cloud when online.
+          Your moods, self-care logs, tasks, messages, and preferences are automatically cached locally in offline storage and synchronized to the cloud when online.
         </p>
 
         <div className="flex space-x-2">
@@ -481,7 +670,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         )}
       </div>
 
-      {/* User Customization Form */}
+      {/* 4. User Customization Form */}
       <form onSubmit={handleSaveProfile} className="glass-card rounded-2xl p-4 border border-purple-500/30 space-y-3.5">
         <h4 className="font-bold text-white text-sm flex items-center gap-1.5">
           <Sparkles className="w-4 h-4 text-fuchsia-400" />
